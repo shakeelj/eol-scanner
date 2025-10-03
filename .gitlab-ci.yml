@@ -1,0 +1,162 @@
+# GitLab CI/CD Pipeline for EOL Scanner
+stages:
+  - setup
+  - scan
+  - artifacts
+
+variables:
+  # Default values
+  INPUT_DIR: "input"
+  OUTPUT_DIR: "output"
+  PYTHON_VERSION: "3.9"
+
+# Setup stage - prepare environment
+setup:
+  stage: setup
+  image: python:${PYTHON_VERSION}-slim
+  before_script:
+    - python --version
+    - pip install --upgrade pip
+    - pip install -r requirements.txt
+  script:
+    - echo "Environment setup complete"
+    - echo "Python version: $(python --version)"
+    - echo "Installed packages:"
+    - pip list
+  artifacts:
+    reports:
+      dotenv: setup.env
+    expire_in: 1 hour
+
+# EOL Scan job
+eol_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}-slim
+  dependencies:
+    - setup
+  before_script:
+    - pip install -r requirements.txt
+    - mkdir -p ${OUTPUT_DIR}
+    - mkdir -p ${INPUT_DIR}
+  script:
+    - echo "Starting EOL scan..."
+    - echo "Input directory: ${INPUT_DIR}"
+    - echo "Output directory: ${OUTPUT_DIR}"
+    
+    # Check if input directory exists and has CSV files
+    - |
+      if [ ! -d "${INPUT_DIR}" ]; then
+        echo "Error: Input directory '${INPUT_DIR}' not found!"
+        echo "Creating input directory..."
+        mkdir -p ${INPUT_DIR}
+      fi
+    
+    # Check for CSV files in input directory
+    - |
+      CSV_COUNT=$(find ${INPUT_DIR} -name "*.csv" | wc -l)
+      if [ $CSV_COUNT -eq 0 ]; then
+        echo "Warning: No CSV files found in ${INPUT_DIR}"
+        echo "Creating example CSV for demonstration..."
+        echo "package_name,version" > ${INPUT_DIR}/example.csv
+        echo "python,3.8" >> ${INPUT_DIR}/example.csv
+        echo "nodejs,14" >> ${INPUT_DIR}/example.csv
+        echo "java,8" >> ${INPUT_DIR}/example.csv
+      fi
+    
+    # Run the EOL scanner
+    - python eol_scanner.py -i ${INPUT_DIR} -o ${OUTPUT_DIR}
+    
+    # Display results summary
+    - echo "Scan completed. Results:"
+    - ls -la ${OUTPUT_DIR}/
+    
+    # Show summary if available
+    - |
+      if [ -f "${OUTPUT_DIR}/summary_"*.json ]; then
+        echo "Summary:"
+        cat ${OUTPUT_DIR}/summary_*.json
+      fi
+  artifacts:
+    name: "eol-scan-results-${CI_PIPELINE_ID}"
+    paths:
+      - ${OUTPUT_DIR}/
+    reports:
+      junit: ${OUTPUT_DIR}/junit.xml
+    expire_in: 30 days
+  only:
+    - main
+    - develop
+    - merge_requests
+    - schedules
+
+# Manual trigger job for custom CSV files
+manual_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}-slim
+  when: manual
+  allow_failure: false
+  before_script:
+    - pip install -r requirements.txt
+    - mkdir -p ${OUTPUT_DIR}
+  script:
+    - echo "Manual EOL scan triggered"
+    - echo "Please ensure your CSV files are placed in the '${INPUT_DIR}' directory"
+    - mkdir -p ${INPUT_DIR}
+    - mkdir -p ${OUTPUT_DIR}
+    - |
+      CSV_COUNT=$(find ${INPUT_DIR} -name "*.csv" | wc -l)
+      if [ $CSV_COUNT -eq 0 ]; then
+        echo "Error: No CSV files found in ${INPUT_DIR}!"
+        echo "Please upload your CSV files to the '${INPUT_DIR}' directory"
+        exit 1
+      fi
+    - python eol_scanner.py -i ${INPUT_DIR} -o ${OUTPUT_DIR}
+    - echo "Manual scan completed. Results:"
+    - ls -la ${OUTPUT_DIR}/
+  artifacts:
+    name: "manual-eol-scan-${CI_PIPELINE_ID}"
+    paths:
+      - ${OUTPUT_DIR}/
+    expire_in: 30 days
+
+# Scheduled scan (runs daily at 2 AM UTC)
+scheduled_scan:
+  stage: scan
+  image: python:${PYTHON_VERSION}-slim
+  when: on_schedule
+  before_script:
+    - pip install -r requirements.txt
+    - mkdir -p ${OUTPUT_DIR}
+  script:
+    - echo "Scheduled EOL scan running..."
+    - mkdir -p ${INPUT_DIR}
+    - mkdir -p ${OUTPUT_DIR}
+    - |
+      CSV_COUNT=$(find ${INPUT_DIR} -name "*.csv" | wc -l)
+      if [ $CSV_COUNT -eq 0 ]; then
+        echo "Warning: No CSV files found for scheduled scan"
+        echo "Creating example CSV for demonstration..."
+        echo "package_name,version" > ${INPUT_DIR}/scheduled_example.csv
+        echo "python,3.8" >> ${INPUT_DIR}/scheduled_example.csv
+        echo "nodejs,14" >> ${INPUT_DIR}/scheduled_example.csv
+        echo "java,8" >> ${INPUT_DIR}/scheduled_example.csv
+      fi
+    - python eol_scanner.py -i ${INPUT_DIR} -o ${OUTPUT_DIR}
+    - echo "Scheduled scan completed"
+  artifacts:
+    name: "scheduled-eol-scan-${CI_PIPELINE_ID}"
+    paths:
+      - ${OUTPUT_DIR}/
+    expire_in: 7 days
+  only:
+    - schedules
+
+# Artifact cleanup job
+cleanup:
+  stage: artifacts
+  image: alpine:latest
+  script:
+    - echo "Pipeline completed successfully"
+    - echo "Artifacts are available for download"
+    - echo "Check the 'eol_results' folder for scan results"
+  when: always

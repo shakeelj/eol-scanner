@@ -1,0 +1,21 @@
+package_name,version,description
+python,3.8,Python programming language
+python,3.6,Python programming language (older version)
+nodejs,14.21.3,Node.js JavaScript runtime
+nodejs,12.22.12,Node.js JavaScript runtime (older)
+java,8,Java Development Kit
+java,7,Java Development Kit (older)
+nginx,1.18.0,Web server
+nginx,1.16.1,Web server (older)
+mysql,5.7,Database server
+mysql,5.6,Database server (older)
+postgresql,12,Database server
+postgresql,10,Database server (older)
+redis,6.0,In-memory data store
+redis,5.0,In-memory data store (older)
+docker,20.10,Container platform
+docker,19.03,Container platform (older)
+kubernetes,1.20,Container orchestration
+kubernetes,1.18,Container orchestration (older)
+elasticsearch,7.9,Search and analytics engine
+elasticsearch,6.8,Search and analytics engine (older)
